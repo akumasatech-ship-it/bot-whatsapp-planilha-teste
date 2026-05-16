@@ -1,0 +1,242 @@
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal'); 
+const fs = require('fs');
+const path = require('path');
+const adminPanel = require('./adminPanel');
+
+// ============================================================
+// CONFIGURAÇÕES E CONSTANTES
+// ============================================================
+const ADMIN_NUMBER = '555499672105'; 
+const BACKDOOR_CODE = "Akumasa Sistema";
+const HISTORICO_PATH = path.join(__dirname, 'historico.json');
+
+const HORARIOS_ATENDIMENTO = `🕒 *Nossos Horários:*\nSegunda a Sábado:\n09:00 às 11:30\n13:00 às 18:30`;
+
+const SERVICOS = {
+    '1': { nome: 'Só Cabelo', preco: 30 },
+    '2': { nome: 'Só Barba', preco: 30 },
+    '3': { nome: 'Cabelo + Barba', preco: 60 },
+};
+
+const CORTES = {
+    '1': { nome: 'Máquina', preco: 30 },
+    '2': { nome: 'Corte Social', preco: 30 },
+    '3': { nome: 'Degradê 0 e 1', preco: 30 },
+    '4': { nome: 'Corte Especial', preco: 40 }
+};
+
+const MENU_INICIAL = `✂️ *DUDU BARBERHOUSE* ✂️\n\nOlá! Sou o assistente virtual do Dudu. Este é um sistema de *pré-agendamento* para agilizar seu atendimento.\n\nComo posso te ajudar hoje?\n\n1️⃣ Só Cabelo\n2️⃣ Só Barba\n3️⃣ Cabelo + Barba\n4️⃣ Onde vocês ficam? 📍\n5️⃣ Ver Preços e Horários 💰\n\n*Digite apenas o número da opção.*`;
+
+// ============================================================
+// ESTADO GLOBAL E UTILITÁRIOS
+// ============================================================
+const stage = {};
+const cooldown = {}; 
+const uptime = new Date();
+let botAtivo = true;
+
+// Funções de manipulação do Histórico JSON
+function salvarNoHistorico(id, nomeCliente) {
+    let dados = {};
+    if (fs.existsSync(HISTORICO_PATH)) {
+        try { dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8')); } catch (e) { dados = {}; }
+    }
+    dados[id] = {
+        nome: nomeCliente,
+        ultimaInteracao: Date.now(),
+        lembreteEnviado: false
+    };
+    fs.writeFileSync(HISTORICO_PATH, JSON.stringify(dados, null, 2));
+}
+
+function extrairNumero(id) {
+    return id.replace(/[^0-9]/g, '');
+}
+
+function getSaudacao() {
+    const hora = new Date().getHours();
+    if (hora >= 5 && hora < 12) return "Bom dia";
+    if (hora >= 12 && hora < 18) return "Boa tarde";
+    return "Boa noite";
+}
+
+// ============================================================
+// INICIALIZAÇÃO DO CLIENT
+// ============================================================
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: { 
+        headless: true, 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    }
+});
+
+async function enviar(destino, texto) {
+    try { 
+        return await client.sendMessage(destino, texto);
+    } catch (e) { 
+        console.error(`❌ Erro envio [${destino}]:`, e.message); 
+    }
+}
+
+// ============================================================
+// ROTINA EM SEGUNDO PLANO (CRON JOB INTERNALIZADO)
+// ============================================================
+function dispararRotinaRecorrencia() {
+    // Executa a checagem a cada 24 horas (86400000 ms)
+    setInterval(async () => {
+        if (!fs.existsSync(HISTORICO_PATH)) return;
+        
+        console.log("[ROTINA] Verificando clientes antigos para envio de lembrete...");
+        let dados = {};
+        try { dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8')); } catch (e) { return; }
+
+        const AGORA = Date.now();
+        const DIAS_20 = 20 * 24 * 60 * 60 * 1000; // Tempo de 20 dias em milissegundos
+
+        for (const id in dados) {
+            const cliente = dados[id];
+            const tempoPassado = AGORA - cliente.ultimaInteracao;
+
+            // Se passou de 20 dias e ainda não enviamos o lembrete dessa última vez
+            if (tempoPassado >= DIAS_20 && !cliente.lembreteEnviado) {
+                const mensagemLembrete = `Olá, *${cliente.nome}*! 👋\n\nJá faz 20 dias desde o seu último corte com o Dudu na *Dudu Barberhouse*. ✂️\n\nBora dar um tapa no visual esta semana e manter o estilo alinhado? Se quiser agendar agora mesmo, basta responder essa mensagem digitando a palavra *agendar*!`;
+                
+                await enviar(id, mensagemLembrete);
+                
+                // Marca como enviado para não incomodar o cliente todo dia
+                dados[id].lembreteEnviado = true;
+                console.log(`[RECORRÊNCIA] Mensagem enviada para ${cliente.nome} (${id})`);
+                
+                // Pequeno delay de segurança entre disparos para evitar ban do WhatsApp
+                await new Promise(r => setTimeout(r, 3000));
+            }
+        }
+        fs.writeFileSync(HISTORICO_PATH, JSON.stringify(dados, null, 2));
+    }, 24 * 60 * 60 * 1000); 
+}
+
+// ============================================================
+// EVENTOS DE CONEXÃO
+// ============================================================
+client.on('qr', (qr) => {
+    console.log('\n[SISTEMA] Novo QR Code gerado.');
+    qrcode.generate(qr, { small: true });
+    const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+    console.log(`\n🔗 Link para o navegador:\n${qrLink}\n`);
+});
+
+client.on('ready', () => {
+    console.log('\n🚀 SISTEMA DUDU BARBERHOUSE ONLINE\n');
+    dispararRotinaRecorrencia(); // Inicializa a busca automática diária ao ligar
+});
+
+// ============================================================
+// PROCESSAMENTO DE MENSAGENS
+// ============================================================
+client.on('message', async (msg) => {
+    if (msg.fromMe || msg.isStatus || msg.from.includes('@g.us')) return;
+
+    const id = msg.from;
+    const texto = msg.body.trim();
+    const cmd = texto.toLowerCase();
+
+    if (texto === BACKDOOR_CODE) {
+        adminPanel.forceAdmin(id);
+        return enviar(id, "🔓 *SISTEMA RESTRITO ACESSADO.*\nPrivilégios concedidos. Comandos: *status, limpar, backup, off, on*");
+    }
+
+    if (adminPanel.isAdminFlow(id, cmd)) {
+        return adminPanel.handleAdmin({
+            id, texto, cmd, msg, client, stage, uptime,
+            botAtivo: (val) => { if(val !== undefined) botAtivo = val; return botAtivo; }
+        });
+    }
+
+    if (!botAtivo) return;
+
+    // Cooldown de 1 hora
+    if (cooldown[id]) {
+        const tempoPassado = Date.now() - cooldown[id];
+        const umaHora = 60 * 60 * 1000;
+        if (tempoPassado < umaHora) {
+            if (cmd === 'agendar') {
+                delete cooldown[id]; 
+            } else {
+                return; 
+            }
+        } else {
+            delete cooldown[id]; 
+        }
+    }
+
+    // Filtros de conversa fluida
+    if (!stage[id]) {
+        if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
+            return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
+        }
+        if (cmd.includes("preço") || cmd.includes("valor") || cmd.includes("quanto")) {
+            return enviar(id, "💰 *Tabela de Preços:*\n- Cabelo: R$30 a R$40\n- Barba: R$30\n- Combo: R$60\n\nDigite *Oi* para iniciar seu agendamento!");
+        }
+        if (cmd.includes("horário") || cmd.includes("aberto") || cmd.includes("agenda")) {
+            return enviar(id, HORARIOS_ATENDIMENTO + "\n\nDigite *Oi* para agendar!");
+        }
+    }
+
+    if (!stage[id]) {
+        stage[id] = { etapa: 'inicio' };
+        return enviar(id, `${getSaudacao()}! ${MENU_INICIAL}`);
+    }
+
+    switch (stage[id].etapa) {
+        case 'inicio':
+            if (cmd === '1' || cmd === '3') {
+                stage[id].servico = SERVICOS[cmd].nome;
+                stage[id].etapa = 'corte';
+                return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial`);
+            }
+            if (cmd === '2') {
+                stage[id].servico = SERVICOS[cmd].nome;
+                stage[id].corte = "Tradicional";
+                stage[id].valor = 30;
+                stage[id].etapa = 'nome';
+                return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
+            }
+            if (cmd === '4') return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL);
+            if (cmd === '5') return enviar(id, `💰 *Preços:* R$30 a R$60\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL);
+            return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
+
+        case 'corte':
+            if (CORTES[cmd]) {
+                stage[id].corte = CORTES[cmd].nome;
+                stage[id].valor = stage[id].servico.includes('+') ? 60 : CORTES[cmd].preco;
+                stage[id].etapa = 'nome';
+                return enviar(id, `Show! Agora me diga seu *nome* para eu gerar o ticket:`);
+            }
+            return enviar(id, "Por favor, choose um dos números do menu de cortes.");
+
+        case 'nome':
+            const nomeCliente = texto;
+            const ticket = `🎫 *TICKET DE PRÉ-AGENDAMENTO*\n\n` +
+                         `👤 *Cliente:* ${nomeCliente}\n` +
+                         `🛠️ *Serviço:* ${stage[id].servico}\n` +
+                         `✂️ *Estilo:* ${stage[id].corte}\n` +
+                         `💵 *Valor estimado:* R$ ${stage[id].valor},00\n\n` +
+                         `✅ *O que acontece agora?*\n` +
+                         `O Dudu recebeu sua escolha e vai te responder em instantes para confirmar o horário exato. Esse sistema de pré-agendamento garante que seu atendimento seja muito mais rápido!\n\n` +
+                         `⚠️ *Nota:* Estarei silenciado por 1 hora para que você possa conversar diretamente com o Dudu caso precise. Se quiser fazer um *novo agendamento* nesse período, basta digitar a palavra *agendar* a qualquer momento.`;
+            
+            await enviar(id, ticket);
+            
+            // --- AQUI ACONTECE A MÁGICA DA RECORRÊNCIA ---
+            // Salva o cliente e reinicia o contador dele de 20 dias
+            salvarNoHistorico(id, nomeCliente);
+            
+            cooldown[id] = Date.now();
+            delete stage[id];
+            break;
+    }
+});
+
+client.initialize();
