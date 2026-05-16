@@ -33,6 +33,12 @@ async function handleAdmin(params) {
     }
 
     if (adminAuth[id] === 'ok') {
+        // --- COMANDO SAIR (FECHAR SESSÃO) ---
+        if (cmd === 'sair') {
+            delete adminAuth[id];
+            return client.sendMessage(id, "🔒 *SESSÃO ENCERRADA.*\nO painel de controle foi fechado com segurança.");
+        }
+
         // --- COMANDOS SIMPLES ---
         if (cmd === 'ping') return client.sendMessage(id, 'pong 🏓');
         
@@ -58,7 +64,7 @@ async function handleAdmin(params) {
             return client.sendMessage(id, "🟢 *BOT ATIVADO.*\nO fluxo de triagem está operando normalmente.");
         }
 
-      // --- BACKUP ROBUSTO ATUALIZADO (PARA RAILWAY + HISTÓRICO DE CLIENTES) ---
+        // --- BACKUP ROBUSTO ATUALIZADO (PARA RAILWAY + HISTÓRICO DE CLIENTES) ---
         if (cmd === 'backup') {
             await client.sendMessage(id, "📦 Gerando backup blindado (incluindo histórico de clientes)...");
             const zipPath = path.join(__dirname, `session_railway.zip`);
@@ -109,5 +115,12 @@ async function handleAdmin(params) {
             }
             return;
         }
-     }    
-    }
+    }    
+}
+
+// 🔥 EXPORTAÇÃO COMPLETA DAS FUNÇÕES PARA O INDEX.JS 🔥
+module.exports = {
+    isAdminFlow,
+    forceAdmin,
+    handleAdmin
+};
