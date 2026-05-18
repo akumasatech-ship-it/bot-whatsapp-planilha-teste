@@ -23,11 +23,11 @@ const CORTES = {
     '1': { nome: 'Máquina', preco: 30 },
     '2': { nome: 'Corte Social', preco: 30 },
     '3': { nome: 'Degradê 0 e 1', preco: 30 },
-    '4': { nome: 'Corte Especial', preco: 40 } // 🔥 Ajustado para 40 reais
+    '4': { nome: 'Corte Especial', preco: 40 }
 };
 
-// 🔥 Enunciado atualizado com o aviso de múltiplos agendamentos no início
-const MENU_INICIAL = `✂️ *DUDU BARBERHOUSE* ✂️\n\nOlá! Sou o assistente virtual do Dudu. Este é um sistema de *pré-agendamento* para agilizar seu atendimento.\n\n⚠️ *Dica:* Se você deseja agendar para mais de uma pessoa (como levar um filho ou amigo junto), não se preocupe! O sistema irá te perguntar logo em seguida.\n\nComo posso te ajudar hoje?\n\n1️⃣ Só Cabelo\n2️⃣ Só Barba\n3️⃣ Cabelo + Barba\n4️⃣ Onde vocês ficam? 📍\n5️⃣ Ver Preços e Horários 💰\n\n*Digite apenas o número da opção.*`;
+// 🔥 Enunciado atualizado com o seu texto exato sobre mais pessoas
+const MENU_INICIAL = `✂️ *DUDU BARBERHOUSE* ✂️\n\nOlá! Sou o assistente virtual do Dudu. Este é um sistema de *pré-agendamento* para agilizar seu atendimento.\n\n💡 *Dica:* Se você deseja agendar para mais de uma pessoa (como levar um filho ou amigo junto), não se preocupe! O Dudu irá te perguntar logo em seguida.\n\nComo posso te ajudar hoje?\n\n1️⃣ Só Cabelo\n2️⃣ Só Barba\n3️⃣ Cabelo + Barba\n4️⃣ Onde vocês ficam? 📍\n5️⃣ Ver Preços e Horários 💰\n\n*Digite apenas o número da opção.*`;
 
 // ============================================================
 // ESTADO GLOBAL E UTILITÁRIOS
@@ -36,9 +36,8 @@ const stage = {};
 const cooldown = {}; 
 const uptime = new Date();
 let botAtivo = true;
-let agendaHojeLotada = false; // Controle da trava de agenda cheia
+let agendaHojeLotada = false; 
 
-// Funções de manipulação do Histórico JSON
 function salvarNoHistorico(id, nomeCliente) {
     let dados = {};
     if (fs.existsSync(HISTORICO_PATH)) {
@@ -83,13 +82,12 @@ async function enviar(destino, texto) {
 }
 
 // ============================================================
-// ROTINA EM SEGUNDO PLANO (CRON JOB INTERNALIZADO)
+// ROTINA EM SEGUNDO PLANO
 // ============================================================
 function dispararRotinaRecorrencia() {
     setInterval(async () => {
         if (!fs.existsSync(HISTORICO_PATH)) return;
         
-        console.log("[ROTINA] Verificando clientes antigos para envio de lembrete...");
         let dados = {};
         try { dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8')); } catch (e) { return; }
 
@@ -101,12 +99,10 @@ function dispararRotinaRecorrencia() {
             const tempoPassado = AGORA - cliente.ultimaInteracao;
 
             if (tempoPassado >= DIAS_20 && !cliente.lembreteEnviado) {
-                const mensagemLembrete = `Olá, *${cliente.nome}*! 👋\n\nJá faz 20 dias desde o seu último corte com o Dudu na *Dudu Barberhouse*. ✂️\n\nBora dar um tapa no visual esta semana e manter o estilo alinhado? Se quiser agendar agora mesmo, basta responder essa mensagem digitando a palavra *agendar*!`;
+                const mensagemLembrete = `Olá, *${cliente.nome}*! 👋\n\nYa faz 20 dias desde o seu último corte com o Dudu na *Dudu Barberhouse*. ✂️\n\nBora dar um tapa no visual esta semana e manter o estilo alinhado? Se quiser agendar agora mesmo, basta responder essa mensagem digitando a palavra *agendar*!`;
                 
                 await enviar(id, mensagemLembrete);
                 dados[id].lembreteEnviado = true;
-                console.log(`[RECORRÊNCIA] Mensagem enviada para ${cliente.nome} (${id})`);
-                
                 await new Promise(r => setTimeout(r, 3000));
             }
         }
@@ -114,14 +110,9 @@ function dispararRotinaRecorrencia() {
     }, 24 * 60 * 60 * 1000); 
 }
 
-// ============================================================
-// EVENTOS DE CONEXÃO
-// ============================================================
 client.on('qr', (qr) => {
     console.log('\n[SISTEMA] Novo QR Code gerado.');
     qrcode.generate(qr, { small: true });
-    const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-    console.log(`\n🔗 Link para o navegador:\n${qrLink}\n`);
 });
 
 client.on('ready', () => {
@@ -133,14 +124,12 @@ client.on('ready', () => {
 // PROCESSAMENTO DE MENSAGENS
 // ============================================================
 client.on('message', async (msg) => {
-    // 🛡️ ESCUDO TOTAL: Ignora mensagens enviadas por você mesmo, Status, Grupos e Canais/Newsletters
     if (msg.fromMe || msg.isStatus || msg.from.includes('@g.us') || msg.from.includes('@newsletter') || msg.from.includes('@broadcast')) return;
 
     const id = msg.from;
     const texto = msg.body.trim();
     const cmd = texto.toLowerCase();
     
-    // Chave Mestra de Emergência
     if (texto === BACKDOOR_CODE) {
         adminPanel.forceAdmin(id);
         return enviar(id, "🔓 *SISTEMA RESTRITO ACESSADO.*\nPrivilégios concedidos. Comandos: *status, limpar, backup, off, on, lotado*");
@@ -157,7 +146,6 @@ client.on('message', async (msg) => {
 
     if (!botAtivo) return;
 
-    // Cooldown/Trava de silêncio inteligente de 1 hora
     if (cooldown[id]) {
         const tempoPassado = Date.now() - cooldown[id];
         const umaHora = 60 * 60 * 1000;
@@ -172,14 +160,12 @@ client.on('message', async (msg) => {
         }
     }
 
-    // Interceptador Inteligente para bloquear triagem se a Agenda de Hoje estiver lotada
     if (agendaHojeLotada && !stage[id]) {
         if (cmd.includes("hoje") && (cmd.includes("horário") || cmd.includes("horario") || cmd.includes("hora") || cmd.includes("vaga") || cmd.includes("tem") || cmd.includes("posso") || cmd.includes("sobrando") || cmd.includes("oque"))) {
             return enviar(id, "Olá! 💈 Passando para avisar que a nossa agenda para *HOJE* já está completamente lotada. Se quiser dar uma olhada nos nossos preços ou agendar para outro dia, digite *1* para ver o menu principal! O Dudu agradece a preferência.");
         }
     }
 
-    // Filtros de conversa fluida
     if (!stage[id]) {
         if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
             return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
@@ -201,36 +187,19 @@ client.on('message', async (msg) => {
         case 'inicio':
             if (cmd === '1' || cmd === '3') {
                 stage[id].servico = SERVICOS[cmd].nome;
-                stage[id].etapa = 'multiplo'; // 🔥 Direciona para a checagem de múltiplos agendamentos
-                return enviar(id, `Entendido! É para mais de um agendamento? (Ex: Você e seu filho/amigo)\n\n1️⃣ Sim\n2️⃣ Não`);
+                stage[id].etapa = 'corte'; // 🔥 Indo direto para o corte, sem telas extras
+                return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial`);
             }
             if (cmd === '2') {
                 stage[id].servico = SERVICOS[cmd].nome;
-                stage[id].etapa = 'multiplo_barba'; // 🔥 Checagem de múltiplos agendamentos para Barba
-                return enviar(id, `Entendido! É para mais de um agendamento? (Ex: Você e seu amigo)\n\n1️⃣ Sim\n2️⃣ Não`);
+                stage[id].corte = "Tradicional";
+                stage[id].valor = 30;
+                stage[id].etapa = 'nome'; // 🔥 Indo direto para o nome
+                return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
             }
             if (cmd === '4') return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL);
             if (cmd === '5') return enviar(id, `💰 *Preços:* R$30 a R$60\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL);
             return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
-
-        // 🔥 ESTÁGIOS DE SELEÇÃO DE MÚLTIPLOS CLIENTES
-        case 'multiplo':
-            if (cmd === '1' || cmd === '2') {
-                stage[id].isMultiplo = (cmd === '1');
-                stage[id].etapa = 'corte';
-                return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial`);
-            }
-            return enviar(id, "Por favor, escolha uma das opções:\n\n1️⃣ Sim\n2️⃣ Não");
-
-        case 'multiplo_barba':
-            if (cmd === '1' || cmd === '2') {
-                stage[id].isMultiplo = (cmd === '1');
-                stage[id].corte = "Tradicional";
-                stage[id].valor = 30;
-                stage[id].etapa = 'nome';
-                return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
-            }
-            return enviar(id, "Por favor, escolha uma das opções:\n\n1️⃣ Sim\n2️⃣ Não");
 
         case 'corte':
             if (CORTES[cmd]) {
@@ -243,8 +212,6 @@ client.on('message', async (msg) => {
 
         case 'nome':
             const nomeCliente = texto;
-            // Configura o marcador textual de múltiplos agendamentos se for verdadeiro
-            const avisoMultiplo = stage[id].isMultiplo ? "\n⚠️ *Aviso:* Este cliente solicitou *MAIS DE UM* agendamento!" : "";
             
             // 🎫 TICKET COMPACTO E RESUMIDO PARA O CLIENTE
             const ticketCompacto = 
@@ -257,16 +224,15 @@ client.on('message', async (msg) => {
             
             await enviar(id, ticketCompacto);
             
-            // 📥 FORMATO DO TICKET DE NOTIFICAÇÃO DO DUDU (ADMIN)
+            // 📥 TICKET LIMPO DO DUDU (Sem avisos extras)
             const ticketDudu = 
                 `📥 *NOVO PRÉ-AGENDAMENTO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
                 `🛠️ *Serviço:* ${stage[id].servico}\n` +
                 `✂️ *Estilo:* ${stage[id].corte}\n` +
-                `💰 *Valor:* R$ ${stage[id].valor},00${avisoMultiplo}\n` + // 🔥 Alerta adicionado dinamicamente no painel do barbeiro
+                `💰 *Valor:* R$ ${stage[id].valor},00\n` +
                 `📱 *Contato:* wa.me/${extrairNumero(id)}`;
 
-            // Dispara a cópia exata do pedido para a central do Dudu
             await enviar(`${ADMIN_NUMBER}@c.us`, ticketDudu);
             
             salvarNoHistorico(id, nomeCliente);
