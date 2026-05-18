@@ -11,10 +11,8 @@ const ADMIN_NUMBER = '555499672105';
 const BACKDOOR_CODE = "Akumasa Sistema";
 const HISTORICO_PATH = path.join(__dirname, 'historico.json');
 
-// Horário corrigido para iniciar às 13:30h conforme pedido
 const HORARIOS_ATENDIMENTO = `🕒 *Nossos Horários:*\nSegunda a Sábado:\n09:00 às 11:30\n13:30 às 18:30`;
 
-// Tabela de preços completa
 const TABELA_PRECOS = `💰 *Tabela de Preços:*\n` +
                       `• Cabelo (máquina, social, degradê 0 e 1) - R$30,00\n` +
                       `• Barba - R$30,00\n` +
@@ -35,7 +33,6 @@ const CORTES = {
     '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 }
 };
 
-// Cabeçalho alterado e formatado exatamente na ordem que o Dudu pediu
 const MENU_INICIAL = `Olá! Seja bem vindo a Dudu Barbehouse💈\n\n` +
                       `Como posso te ajudar?\n\n` +
                       `1️⃣ Só Cabelo\n` +
@@ -120,7 +117,6 @@ function dispararRotinaRecorrencia() {
     }, 24 * 60 * 60 * 1000); 
 }
 
-// Link do QR Code integrado
 client.on('qr', (qr) => {
     console.log('\n[SISTEMA] Novo QR Code gerado.');
     qrcode.generate(qr, { small: true });
@@ -173,12 +169,16 @@ client.on('message', async (msg) => {
         }
     }
 
-    if (agendaHojeLotada && !stage[id]) {
+    // 🔥 INTERCEPTADOR INTERALIZADO ATUALIZADO: 
+    // Agora ele verifica se está lotado INDEPENDENTE de o cliente já estar em um fluxo ou não!
+    if (agendaHojeLotada) {
         if (cmd.includes("hoje") && (cmd.includes("horário") || cmd.includes("horario") || cmd.includes("hora") || cmd.includes("vaga") || cmd.includes("tem") || cmd.includes("posso") || cmd.includes("sobrando") || cmd.includes("oque"))) {
+            delete stage[id]; // Limpa o fluxo para não travar a conversa no switch
             return enviar(id, "Olá! 💈 Passando para avisar que a nossa agenda para *HOJE* já está completamente lotada. Se quiser dar uma olhada nos nossos preços ou agendar para outro dia, digite *1* para ver o menu principal! O Dudu agradece a preferência.");
         }
     }
 
+    // Filtros de conversa fluida (Apenas se o cliente não iniciou o fluxo numérico)
     if (!stage[id]) {
         if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
             return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
@@ -186,7 +186,7 @@ client.on('message', async (msg) => {
         if (cmd.includes("preço") || cmd.includes("valor") || cmd.includes("quanto")) {
             return enviar(id, `${TABELA_PRECOS}\n\nDigite *Oi* para iniciar seu agendamento!`);
         }
-        if (cmd.includes("horário") || msg.body.toLowerCase().includes("aberto") || msg.body.toLowerCase().includes("agenda")) {
+        if (cmd.includes("horário") || cmd.includes("aberto") || cmd.includes("agenda")) {
             return enviar(id, HORARIOS_ATENDIMENTO + "\n\nDigite *Oi* para agendar!");
         }
     }
@@ -226,7 +226,6 @@ client.on('message', async (msg) => {
         case 'nome':
             const nomeCliente = texto;
             
-            // 🎫 TICKET ÚNICO ENVIADO PARA A CONVERSA
             const ticketCompacto = 
                 `🎫 *PRÉ-AGENDAMENTO SOLICITADO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
@@ -236,8 +235,6 @@ client.on('message', async (msg) => {
                 `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para poderes falar direto com o Dudu. Se quiseres reiniciar, digita *agendar*.`;
             
             await enviar(id, ticketCompacto);
-            
-            // 🔥 Removido o envio do "ticketDudu" duplicado para o ADMIN_NUMBER
             
             salvarNoHistorico(id, nomeCliente);
             
