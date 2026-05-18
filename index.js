@@ -11,10 +11,10 @@ const ADMIN_NUMBER = '555499672105';
 const BACKDOOR_CODE = "Akumasa Sistema";
 const HISTORICO_PATH = path.join(__dirname, 'historico.json');
 
-// 🔥 3. Horário corrigido para iniciar às 13:30h conforme pedido
+// Horário corrigido para iniciar às 13:30h conforme pedido
 const HORARIOS_ATENDIMENTO = `🕒 *Nossos Horários:*\nSegunda a Sábado:\n09:00 às 11:30\n13:30 às 18:30`;
 
-// 🔥 4. Tabela de preços completa adicionada aqui
+// Tabela de preços completa
 const TABELA_PRECOS = `💰 *Tabela de Preços:*\n` +
                       `• Cabelo (máquina, social, degradê 0 e 1) - R$30,00\n` +
                       `• Barba - R$30,00\n` +
@@ -32,10 +32,10 @@ const CORTES = {
     '1': { nome: 'Máquina', preco: 30 },
     '2': { nome: 'Corte Social', preco: 30 },
     '3': { nome: 'Degradê 0 e 1', preco: 30 },
-    '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 } // 🔥 5. Parênteses adicionado ao Corte Especial
+    '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 }
 };
 
-// 🔥 1. Cabeçalho alterado e formatado exatamente na ordem que o Dudu pediu
+// Cabeçalho alterado e formatado exatamente na ordem que o Dudu pediu
 const MENU_INICIAL = `Olá! Seja bem vindo a Dudu Barbehouse💈\n\n` +
                       `Como posso te ajudar?\n\n` +
                       `1️⃣ Só Cabelo\n` +
@@ -120,7 +120,7 @@ function dispararRotinaRecorrencia() {
     }, 24 * 60 * 60 * 1000); 
 }
 
-// 🔗 GERADOR DE LINK DO QR CODE INTEGRADO E FUNCIONANDO 100%
+// Link do QR Code integrado
 client.on('qr', (qr) => {
     console.log('\n[SISTEMA] Novo QR Code gerado.');
     qrcode.generate(qr, { small: true });
@@ -186,12 +186,11 @@ client.on('message', async (msg) => {
         if (cmd.includes("preço") || cmd.includes("valor") || cmd.includes("quanto")) {
             return enviar(id, `${TABELA_PRECOS}\n\nDigite *Oi* para iniciar seu agendamento!`);
         }
-        if (cmd.includes("horário") || cmd.includes("aberto") || cmd.includes("agenda")) {
+        if (cmd.includes("horário") || msg.body.toLowerCase().includes("aberto") || msg.body.toLowerCase().includes("agenda")) {
             return enviar(id, HORARIOS_ATENDIMENTO + "\n\nDigite *Oi* para agendar!");
         }
     }
 
-    // 🔥 2. Removida a saudação com "Bom dia/Boa tarde" para ir direto ao menu principal sem rodeios
     if (!stage[id]) {
         stage[id] = { etapa: 'inicio' };
         return enviar(id, MENU_INICIAL);
@@ -202,7 +201,7 @@ client.on('message', async (msg) => {
             if (cmd === '1' || cmd === '3') {
                 stage[id].servico = SERVICOS[cmd].nome;
                 stage[id].etapa = 'corte'; 
-                return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial (demais cortes além dos descritos acima)`); // 🔥 5. Parênteses adicionado aqui também
+                return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial (demais cortes além dos descritos acima)`);
             }
             if (cmd === '2') {
                 stage[id].servico = SERVICOS[cmd].nome;
@@ -212,7 +211,7 @@ client.on('message', async (msg) => {
                 return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
             }
             if (cmd === '4') return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL);
-            if (cmd === '5') return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL); // 🔥 3 e 4. Exibe os preços completos e horários certos
+            if (cmd === '5') return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL);
             return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
 
         case 'corte':
@@ -227,6 +226,7 @@ client.on('message', async (msg) => {
         case 'nome':
             const nomeCliente = texto;
             
+            // 🎫 TICKET ÚNICO ENVIADO PARA A CONVERSA
             const ticketCompacto = 
                 `🎫 *PRÉ-AGENDAMENTO SOLICITADO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
@@ -237,15 +237,7 @@ client.on('message', async (msg) => {
             
             await enviar(id, ticketCompacto);
             
-            const ticketDudu = 
-                `📥 *NOVO PRÉ-AGENDAMENTO*\n\n` +
-                `👤 *Cliente:* ${nomeCliente}\n` +
-                `🛠️ *Serviço:* ${stage[id].servico}\n` +
-                `✂️ *Estilo:* ${stage[id].corte}\n` +
-                `💰 *Valor:* R$ ${stage[id].valor},00\n` +
-                `📱 *Contato:* wa.me/${extrairNumero(id)}`;
-
-            await enviar(`${ADMIN_NUMBER}@c.us`, ticketDudu);
+            // 🔥 Removido o envio do "ticketDudu" duplicado para o ADMIN_NUMBER
             
             salvarNoHistorico(id, nomeCliente);
             

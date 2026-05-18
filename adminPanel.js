@@ -15,7 +15,7 @@ function forceAdmin(id) {
 }
 
 async function handleAdmin(params) {
-    const { id, texto, cmd, msg, client, stage, uptime, botAtivo } = params;
+    const { id, texto, cmd, msg, client, stage, uptime, botAtivo, isHojeLotado, setHojeLotado } = params;
 
     // --- ENTRADA NO PAINEL ---
     if (cmd === GATILHO && !adminAuth[id]) {
@@ -25,6 +25,7 @@ async function handleAdmin(params) {
                           `• *status* — Ver saúde do sistema\n` +
                           `• *on* — Ligar bot para clientes\n` +
                           `• *off* — Desligar bot para clientes\n` +
+                          `• *lotado* — Bloquear/Liberar vagas para hoje 🚨\n` +
                           `• *limpar* — Resetar conversas ativas\n` +
                           `• *backup* — Gerar arquivo para Railway\n` +
                           `• *ping* — Testar resposta\n` +
@@ -46,7 +47,18 @@ async function handleAdmin(params) {
             const diff = new Date() - uptime;
             const horas = Math.floor(diff / 3600000);
             const minutos = Math.floor((diff % 3600000) / 60000);
-            return client.sendMessage(id, `📊 *STATUS SISTEMA*\n\n• Uptime: ${horas}h ${minutos}m\n• Bot Ativo: ${botAtivo() ? 'SIM ✅' : 'NÃO 🔴'}\n• Sessões: ${Object.keys(stage).length} ativas`);
+            return client.sendMessage(id, `📊 *STATUS SISTEMA*\n\n• Uptime: ${horas}h ${minutos}m\n• Bot Ativo: ${botAtivo() ? 'SIM ✅' : 'NÃO 🔴'}\n• Agenda de Hoje Lotada: ${isHojeLotado() ? 'SIM 🛑' : 'NÃO 🟢'}\n• Sessões: ${Object.keys(stage).length} ativas`);
+        }
+
+        // 🔥 COMANDO LOTADO CONFIGURADO E FUNCIONAL
+        if (cmd === 'lotado') {
+            const novoEstado = !isHojeLotado();
+            setHojeLotado(novoEstado);
+            if (novoEstado) {
+                return client.sendMessage(id, "🛑 *AGENDA DE HOJE MARCADA COMO LOTADA.*\nClientes que perguntarem por vagas hoje receberão um aviso de encerramento automático.");
+            } else {
+                return client.sendMessage(id, "🟢 *AGENDA DE HOJE LIBERADA.*\nPerguntas relacionadas a horários para hoje voltaram a passar normalmente.");
+            }
         }
 
         if (cmd === 'limpar') {
@@ -118,7 +130,6 @@ async function handleAdmin(params) {
     }    
 }
 
-// 🔥 EXPORTAÇÃO COMPLETA DAS FUNÇÕES PARA O INDEX.JS 🔥
 module.exports = {
     isAdminFlow,
     forceAdmin,
