@@ -26,7 +26,6 @@ const CORTES = {
     '4': { nome: 'Corte Especial', preco: 40 }
 };
 
-// 🔥 Enunciado atualizado com o seu texto exato sobre mais pessoas
 const MENU_INICIAL = `✂️ *DUDU BARBERHOUSE* ✂️\n\nOlá! Sou o assistente virtual do Dudu. Este é um sistema de *pré-agendamento* para agilizar seu atendimento.\n\n💡 *Dica:* Se você deseja agendar para mais de uma pessoa (como levar um filho ou amigo junto), não se preocupe! O Dudu irá te perguntar logo em seguida.\n\nComo posso te ajudar hoje?\n\n1️⃣ Só Cabelo\n2️⃣ Só Barba\n3️⃣ Cabelo + Barba\n4️⃣ Onde vocês ficam? 📍\n5️⃣ Ver Preços e Horários 💰\n\n*Digite apenas o número da opção.*`;
 
 // ============================================================
@@ -110,9 +109,12 @@ function dispararRotinaRecorrencia() {
     }, 24 * 60 * 60 * 1000); 
 }
 
+// 🔥 EVENTO DE QR CODE CORRIGIDO COM O LINK EXTERNO DE VOLTA
 client.on('qr', (qr) => {
     console.log('\n[SISTEMA] Novo QR Code gerado.');
     qrcode.generate(qr, { small: true });
+    const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+    console.log(`\n🔗 Link para abrir no navegador:\n${qrLink}\n`);
 });
 
 client.on('ready', () => {
@@ -187,14 +189,14 @@ client.on('message', async (msg) => {
         case 'inicio':
             if (cmd === '1' || cmd === '3') {
                 stage[id].servico = SERVICOS[cmd].nome;
-                stage[id].etapa = 'corte'; // 🔥 Indo direto para o corte, sem telas extras
+                stage[id].etapa = 'corte'; 
                 return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial`);
             }
             if (cmd === '2') {
                 stage[id].servico = SERVICOS[cmd].nome;
                 stage[id].corte = "Tradicional";
                 stage[id].valor = 30;
-                stage[id].etapa = 'nome'; // 🔥 Indo direto para o nome
+                stage[id].etapa = 'nome'; 
                 return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
             }
             if (cmd === '4') return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL);
@@ -213,7 +215,6 @@ client.on('message', async (msg) => {
         case 'nome':
             const nomeCliente = texto;
             
-            // 🎫 TICKET COMPACTO E RESUMIDO PARA O CLIENTE
             const ticketCompacto = 
                 `🎫 *PRÉ-AGENDAMENTO SOLICITADO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
@@ -224,7 +225,6 @@ client.on('message', async (msg) => {
             
             await enviar(id, ticketCompacto);
             
-            // 📥 TICKET LIMPO DO DUDU (Sem avisos extras)
             const ticketDudu = 
                 `📥 *NOVO PRÉ-AGENDAMENTO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
