@@ -50,7 +50,6 @@ async function handleAdmin(params) {
             return client.sendMessage(id, `📊 *STATUS SISTEMA*\n\n• Uptime: ${horas}h ${minutos}m\n• Bot Ativo: ${botAtivo() ? 'SIM ✅' : 'NÃO 🔴'}\n• Agenda de Hoje Lotada: ${isHojeLotado() ? 'SIM 🛑' : 'NÃO 🟢'}\n• Sessões: ${Object.keys(stage).length} ativas`);
         }
 
-        // 🔥 COMANDO LOTADO CONFIGURADO E FUNCIONAL
         if (cmd === 'lotado') {
             const novoEstado = !isHojeLotado();
             setHojeLotado(novoEstado);
@@ -76,54 +75,73 @@ async function handleAdmin(params) {
             return client.sendMessage(id, "🟢 *BOT ATIVADO.*\nO fluxo de triagem está operando normalmente.");
         }
 
-        // --- BACKUP ROBUSTO ATUALIZADO (PARA RAILWAY + HISTÓRICO DE CLIENTES) ---
+        // --- BACKUP ROBUSTO ATUALIZADO E RECURSIVO ---
         if (cmd === 'backup') {
-            await client.sendMessage(id, "📦 Gerando backup blindado (incluindo histórico de clientes)...");
-            const zipPath = path.join(__dirname, `session_railway.zip`);
+            await client.sendMessage(id, "📦 Gerando backup completo da sessão e dados locais...");
+            const zipPath = path.join(__dirname, 'session_railway.zip');
             const authPath = path.join(__dirname, '.wwebjs_auth');
             const historicoPath = path.join(__dirname, 'historico.json');
 
             try {
                 const zip = new AdmZip();
                 
-                // 1. Inclui o arquivo de banco de dados local (se ele existir)
+                // 1. Inclui o arquivo de histórico
                 if (fs.existsSync(historicoPath)) {
                     zip.addLocalFile(historicoPath);
                 }
 
-                // 2. Inclui os arquivos vitais da sessão do WhatsApp
+                // 2. Mapeamento recursivo e filtrado da pasta de autenticação
                 if (fs.existsSync(authPath)) {
-                    const folders = fs.readdirSync(authPath);
-                    folders.forEach(file => {
-                        const fullPath = path.join(authPath, file);
-                        const isDirectory = fs.lstatSync(fullPath).isDirectory();
+                    
+                    // Função auxiliar para varrer todas as subpastas profundamente
+                    const adicionarPastaRecursiva = (diretorioAtual, rotaNoZip) => {
+                        const arquivos = fs.readdirSync(diretorioAtual);
                         
-                        if (isDirectory) {
-                            if (file !== 'Cache' && file !== 'Code Cache' && file !== 'GPUCache') {
-                                try {
-                                    zip.addLocalFolder(fullPath, file);
-                                } catch (e) {}
-                            }
-                        } else {
-                            if (!file.includes('lock') && !file.includes('Singleton')) {
-                                zip.addLocalFile(fullPath);
-                            }
-                        }
-                    });
+                        arquivos.forEach(item => {
+                            const caminhoCompleto = path.join(diretorioAtual, item);
+                            const estatisticas = fs.lstatSync(caminhoCompleto);
+                            const caminhoNoZip = rotaNoZip ? path.join(rotaNoZip, item) : item;
 
+                            // Ignora pastas inúteis de cache pesado que travam e incham o arquivo
+                            if (item === 'Cache' || item === 'Code Cache' || item === 'GPUCache' || item === 'Local Storage') {
+                                return;
+                            }
+
+                            if (estatisticas.isDirectory()) {
+                                adicionarPastaRecursiva(caminhoCompleto, caminhoNoZip);
+                            } else {
+                                // Ignora arquivos de trava do sistema criados pelo Chromium ativo
+                                if (!item.includes('lock') && !item.includes('Singleton')) {
+                                    try {
+                                        zip.addLocalFile(caminhoCompleto, rotaNoZip);
+                                    } catch (err) {
+                                        console.log(`[BACKUP] Pulando arquivo ocupado: ${item}`);
+                                    }
+                                }
+                            }
+                        });
+                    };
+
+                    // Dispara a varredura dentro da pasta .wwebjs_auth colocando os dados dentro de uma pasta de mesmo nome no ZIP
+                    adicionarPastaRecursiva(authPath, '.wwebjs_auth');
+
+                    // Escreve o arquivo ZIP final no disco temporário
                     zip.writeZip(zipPath);
+                    
+                    // Prepara o arquivo para o envio
                     const media = MessageMedia.fromFilePath(zipPath);
                     
                     await client.sendMessage(id, media, { 
-                        caption: "📑 *BACKUP COMPLETO GERADO!*\n\nSua sessão e o histórico de 20 dias dos clientes estão salvos e unificados neste arquivo para deploy." 
+                        caption: "📑 *BACKUP COMPLETO E EXTRAÍDO!*\n\nSua sessão ativa do WhatsApp e o arquivo de histórico foram empacotados com sucesso para uso em novos servidores." 
                     });
                     
+                    // Limpa o arquivo temporário gerado localmente
                     fs.unlinkSync(zipPath); 
                 } else {
-                    await client.sendMessage(id, "❌ Erro: Pasta .wwebjs_auth não encontrada.");
+                    await client.sendMessage(id, "❌ Erro: Pasta de credenciais (.wwebjs_auth) não foi encontrada no servidor local.");
                 }
             } catch (e) {
-                await client.sendMessage(id, "❌ Erro no Backup: " + e.message);
+                await client.sendMessage(id, "❌ Falha crítica ao gerar o pacote de backup: " + e.message);
             }
             return;
         }
