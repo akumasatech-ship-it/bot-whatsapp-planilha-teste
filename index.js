@@ -41,7 +41,7 @@ const MENU_INICIAL = `Olá! Seja bem vindo a Dudu Barbehouse💈\n\n` +
                       `4️⃣ Onde vocês ficam? 📍\n` +
                       `5️⃣ Ver Preços e Horários 💰\n\n` +
                       `*Digite apenas o número da opção.*\n\n` +
-                      `💡 *Dica:* Se você deseja agendar para mais de uma pessoa (como levar um filho ou amigo junto), não se preocupe! O Dudu irá te perguntar logo em seguida.`;
+                      `💡 *Dica:* Se você deseja agendar para mais de uma pessoa (filhos ou amigo), avise o Dudu após a geração do seu pedido!`;
 
 // ============================================================
 // ESTADO GLOBAL E UTILITÁRIOS
@@ -106,7 +106,7 @@ function dispararRotinaRecorrencia() {
             const tempoPassado = AGORA - cliente.ultimaInteracao;
 
             if (tempoPassado >= DIAS_20 && !cliente.lembreteEnviado) {
-                const mensagemLembrete = `Olá, *${cliente.nome}*! 👋\n\nJá faz 20 dias desde o seu último corte com o Dudu na *Dudu Barberhouse*. ✂️\n\nBora dar um tapa no visual esta semana e manter o estilo alinhado? Se quiser agendar agora mesmo, basta responder essa mensagem digitando a palavra *agendar*!`;
+                const mensagemLembrete = `Olá, *${cliente.nome}*! 👋\n\nJá faz 20 dias desde o seu conteúdo de corte com o Dudu na *Dudu Barberhouse*. ✂️\n\nBora dar um tapa no visual esta semana e manter o estilo alinhado? Se quiser agendar agora mesmo, basta responder essa mensagem digitando a palavra *agendar*!`;
                 
                 await enviar(id, mensagemLembrete);
                 dados[id].lembreteEnviado = true;
@@ -130,15 +130,28 @@ client.on('ready', () => {
 });
 
 // ============================================================
-// PROCESSAMENTO DE MENSAGENS
+// PROCESSAMENTO DE MENSAGENS (MUDADO PARA MESSAGE_CREATE)
 // ============================================================
-client.on('message', async (msg) => {
-    if (msg.fromMe || msg.isStatus || msg.from.includes('@g.us') || msg.from.includes('@newsletter') || msg.from.includes('@broadcast')) return;
+client.on('message_create', async (msg) => {
+    // 🛡️ ESCUDO DE CANAIS E GRUPOS (Removido o msg.fromMe daqui para podermos escutar você mesmo)
+    if (msg.isStatus || msg.from.includes('@g.us') || msg.from.includes('@newsletter') || msg.from.includes('@broadcast')) return;
+
+    // 🛡️ OTIMIZAÇÃO DE MÍDIA
+    if (msg.hasMedia || msg.type !== 'chat') return;
 
     const id = msg.from;
     const texto = msg.body.trim();
     const cmd = texto.toLowerCase();
     
+    // 🔥 FILTRO PARA O PRÓPRIO NÚMERO (VOCÊ / FRONT-END):
+    // Se a mensagem foi enviada por você, só deixa passar se for a Chave Mestra ou um comando Admin.
+    // Isso impede o bot de responder a si mesmo quando conversa com clientes normais!
+    if (msg.fromMe) {
+        if (texto !== BACKDOOR_CODE && !adminPanel.isAdminFlow(id, cmd)) {
+            return; // Ignora silenciosamente mensagens comuns que você enviar
+        }
+    }
+
     if (texto === BACKDOOR_CODE) {
         adminPanel.forceAdmin(id);
         return enviar(id, "🔓 *SISTEMA RESTRITO ACESSADO.*\nPrivilégios concedidos. Comandos: *status, limpar, backup, off, on, lotado*");
@@ -153,6 +166,7 @@ client.on('message', async (msg) => {
         });
     }
 
+    // Se o bot estiver desligado no painel, bloqueia clientes daqui para baixo
     if (!botAtivo) return;
 
     if (cooldown[id]) {
@@ -169,16 +183,15 @@ client.on('message', async (msg) => {
         }
     }
 
-    // 🔥 INTERCEPTADOR INTERALIZADO ATUALIZADO: 
-    // Agora ele verifica se está lotado INDEPENDENTE de o cliente já estar em um fluxo ou não!
+    // INTERCEPTADOR INTERALIZADO ATUALIZADO
     if (agendaHojeLotada) {
         if (cmd.includes("hoje") && (cmd.includes("horário") || cmd.includes("horario") || cmd.includes("hora") || cmd.includes("vaga") || cmd.includes("tem") || cmd.includes("posso") || cmd.includes("sobrando") || cmd.includes("oque"))) {
-            delete stage[id]; // Limpa o fluxo para não travar a conversa no switch
-            return enviar(id, "Olá! 💈 Passando para avisar que a nossa agenda para *HOJE* já está completamente lotada. Se quiser dar uma olhada nos nossos preços ou agendar para outro dia, digite *1* para ver o menu principal! O Dudu agradece a preferência.");
+            delete stage[id]; 
+            return enviar(id, "Olá! 💈 A agenda de hoje já está lotada. Se quiser agendar para outro dia ou consultar os preços, digite 1. Agradecemos a preferência!");
         }
     }
 
-    // Filtros de conversa fluida (Apenas se o cliente não iniciou o fluxo numérico)
+    // Filtros de conversa fluida 
     if (!stage[id]) {
         if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
             return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
@@ -227,12 +240,12 @@ client.on('message', async (msg) => {
             const nomeCliente = texto;
             
             const ticketCompacto = 
-                `🎫 *PRÉ-AGENDAMENTO SOLICITADO*\n\n` +
+                `🎫 *PEDIDO SOLICITADO*\n\n` +
                 `👤 *Cliente:* ${nomeCliente}\n` +
                 `✂️ *Serviço:* ${stage[id].servico} (${stage[id].corte})\n` +
                 `💵 *Valor:* R$ ${stage[id].valor},00\n\n` +
-                `O Dudu já recebeu o teu pedido e vai responder-te em instantes para confirmar o horário exato! 💈\n\n` +
-                `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para poderes falar direto com o Dudu. Se quiseres reiniciar, digita *agendar*.`;
+                `O Dudu já recebeu o seu pedido e em instantes te responderá com os horários disponíveis! 💈\n\n` +
+                `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para você poder falar direto com o Dudu. Se quiseres reiniciar, digite *agendar*.`;
             
             await enviar(id, ticketCompacto);
             
