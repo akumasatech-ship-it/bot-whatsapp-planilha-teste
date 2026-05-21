@@ -1,4 +1,4 @@
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal'); 
 const fs = require('fs');
 const path = require('path');
@@ -7,9 +7,11 @@ const adminPanel = require('./adminPanel');
 // ============================================================
 // CONFIGURAÇÕES E CONSTANTES
 // ============================================================
-const ADMIN_NUMBER = '555499672105'; 
-const BACKDOOR_CODE = "Akumasa Sistema";
+const BACKDOOR_CODE = "Painel de comando"; 
 const HISTORICO_PATH = path.join(__dirname, 'historico.json');
+
+// 🧪 NÚMERO DO SEU BOT DE TESTE (NÚMERO DO SAMUEL FIXADO)
+const NUMERO_TESTE_SAMUEL = '99972306'; 
 
 const HORARIOS_ATENDIMENTO = `🕒 *Nossos Horários:*\nSegunda a Sábado:\n09:00 às 11:30\n13:30 às 18:30`;
 
@@ -33,15 +35,14 @@ const CORTES = {
     '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 }
 };
 
-const MENU_INICIAL = `Olá! Seja bem vindo a Dudu Barbehouse💈\n\n` +
+const MENU_INICIAL = `Olá! Seja bem vindo à Dudu Barberhouse!\n\n` +
                       `Como posso te ajudar?\n\n` +
-                      `1️⃣ Só Cabelo\n` +
-                      `2️⃣ Só Barba\n` +
-                      `3️⃣ Cabelo + Barba\n` +
-                      `4️⃣ Onde vocês ficam? 📍\n` +
-                      `5️⃣ Ver Preços e Horários 💰\n\n` +
-                      `*Digite apenas o número da opção.*\n\n` +
-                      `💡 *Dica:* Se você deseja agendar para mais de uma pessoa (filhos ou amigo), avise o Dudu após a geração do seu pedido!`;
+                      `1️⃣ Só Cabelo💇🏻‍♂️\n` +
+                      `2️⃣ Só Barba\n🧔🏻‍♂️` +
+                      `3️⃣ Cabelo + Barba\n🧔🏽` +
+                      `4️⃣ Endereço📍\n` +
+                      `5️⃣ Preços e Horário de Funcionamento\n\n` +
+                      `💡 Para agendar pra mais de uma pessoa (filhos ou amigo), informe o Dudu após a geração do seu pedido!`;
 
 // ============================================================
 // ESTADO GLOBAL E UTILITÁRIOS
@@ -76,13 +77,29 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: { 
         headless: true, 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ] 
     }
 });
 
+// 🔥 FUNÇÃO DE ENVIO ATUALIZADA COM FORÇADOR DE BOLINHA VERDE (UNREAD)
 async function enviar(destino, texto) {
     try { 
-        return await client.sendMessage(destino, texto);
+        const msgEnviada = await client.sendMessage(destino, texto);
+        
+        // 🟢 Força a conversa a voltar a ficar como "Não Lida" no WhatsApp do Dudu
+        try {
+            const chat = await client.getChatById(destino);
+            await chat.markUnread();
+        } catch (err) {
+            // Ignora em silêncio para não poluir os logs caso seja uma falha rápida de sincronia
+        }
+
+        return msgEnviada;
     } catch (e) { 
         console.error(`❌ Erro envio [${destino}]:`, e.message); 
     }
@@ -130,29 +147,44 @@ client.on('ready', () => {
 });
 
 // ============================================================
-// PROCESSAMENTO DE MENSAGENS (MUDADO PARA MESSAGE_CREATE)
+// PROCESSAMENTO DE MENSAGENS
 // ============================================================
 client.on('message_create', async (msg) => {
-    // 🛡️ ESCUDO DE CANAIS E GRUPOS (Removido o msg.fromMe daqui para podermos escutar você mesmo)
     if (msg.isStatus || msg.from.includes('@g.us') || msg.from.includes('@newsletter') || msg.from.includes('@broadcast')) return;
-
-    // 🛡️ OTIMIZAÇÃO DE MÍDIA
     if (msg.hasMedia || msg.type !== 'chat') return;
 
     const id = msg.from;
     const texto = msg.body.trim();
     const cmd = texto.toLowerCase();
+
+    // 🛡️ ISOLAMENTO DE AMBIENTE FIXO (IGNORA O SEU BOT DE TESTE)
+    if (id.includes(NUMERO_TESTE_SAMUEL)) return;
+
+    // 🛡️ ESCUDO ANTI-LOOP EXPANDIDO
+    if (
+        cmd.includes("dudu barberhouse") || 
+        cmd.includes("dudu barbehouse") || 
+        cmd.includes("pedido solicitado") || 
+        cmd.includes("agenda de hoje já está lotada") || 
+        cmd.includes("ops, não entendi") ||
+        cmd.includes("opção inválida") ||          
+        cmd.includes("opcao invalida") ||          
+        cmd.includes("digite uma opção") ||        
+        cmd.includes("assistente virtual") ||      
+        cmd.includes("atendimento automático")     
+    ) {
+        return; 
+    }
     
-    // 🔥 FILTRO PARA O PRÓPRIO NÚMERO (VOCÊ / FRONT-END):
-    // Se a mensagem foi enviada por você, só deixa passar se for a Chave Mestra ou um comando Admin.
-    // Isso impede o bot de responder a si mesmo quando conversa com clientes normais!
+    const ehChaveMestra = (cmd === "painel de comando" || cmd === "painel de controle");
+
     if (msg.fromMe) {
-        if (texto !== BACKDOOR_CODE && !adminPanel.isAdminFlow(id, cmd)) {
-            return; // Ignora silenciosamente mensagens comuns que você enviar
+        if (!ehChaveMestra && !adminPanel.isAdminFlow(id, cmd)) {
+            return; 
         }
     }
 
-    if (texto === BACKDOOR_CODE) {
+    if (ehChaveMestra) {
         adminPanel.forceAdmin(id);
         return enviar(id, "🔓 *SISTEMA RESTRITO ACESSADO.*\nPrivilégios concedidos. Comandos: *status, limpar, backup, off, on, lotado*");
     }
@@ -166,14 +198,14 @@ client.on('message_create', async (msg) => {
         });
     }
 
-    // Se o bot estiver desligado no painel, bloqueia clientes daqui para baixo
     if (!botAtivo) return;
 
+    // ⏰ GERENCIAMENTO DO SILÊNCIO/COOLDOWN
     if (cooldown[id]) {
         const tempoPassado = Date.now() - cooldown[id];
         const umaHora = 60 * 60 * 1000;
         if (tempoPassado < umaHora) {
-            if (cmd === 'agendar') {
+            if (cmd === 'voltar') { 
                 delete cooldown[id]; 
             } else {
                 return; 
@@ -183,7 +215,6 @@ client.on('message_create', async (msg) => {
         }
     }
 
-    // INTERCEPTADOR INTERALIZADO ATUALIZADO
     if (agendaHojeLotada) {
         if (cmd.includes("hoje") && (cmd.includes("horário") || cmd.includes("horario") || cmd.includes("hora") || cmd.includes("vaga") || cmd.includes("tem") || cmd.includes("posso") || cmd.includes("sobrando") || cmd.includes("oque"))) {
             delete stage[id]; 
@@ -191,7 +222,7 @@ client.on('message_create', async (msg) => {
         }
     }
 
-    // Filtros de conversa fluida 
+    // Filtros de conversa fluida
     if (!stage[id]) {
         if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
             return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
@@ -199,13 +230,10 @@ client.on('message_create', async (msg) => {
         if (cmd.includes("preço") || cmd.includes("valor") || cmd.includes("quanto")) {
             return enviar(id, `${TABELA_PRECOS}\n\nDigite *Oi* para iniciar seu agendamento!`);
         }
-        if (cmd.includes("horário") || cmd.includes("aberto") || cmd.includes("agenda")) {
-            return enviar(id, HORARIOS_ATENDIMENTO + "\n\nDigite *Oi* para agendar!");
-        }
     }
 
     if (!stage[id]) {
-        stage[id] = { etapa: 'inicio' };
+        stage[id] = { etapa: 'inicio', timestamps: [] }; 
         return enviar(id, MENU_INICIAL);
     }
 
@@ -214,6 +242,7 @@ client.on('message_create', async (msg) => {
             if (cmd === '1' || cmd === '3') {
                 stage[id].servico = SERVICOS[cmd].nome;
                 stage[id].etapa = 'corte'; 
+                stage[id].timestamps = []; 
                 return enviar(id, `Perfeito! Qual tipo de corte você deseja?\n\n1️⃣ Máquina\n2️⃣ Corte Social\n3️⃣ Degradê 0 e 1\n4️⃣ Corte Especial (demais cortes além dos descritos acima)`);
             }
             if (cmd === '2') {
@@ -221,18 +250,48 @@ client.on('message_create', async (msg) => {
                 stage[id].corte = "Tradicional";
                 stage[id].valor = 30;
                 stage[id].etapa = 'nome'; 
+                stage[id].timestamps = [];
                 return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
             }
-            if (cmd === '4') return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL);
-            if (cmd === '5') return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL);
-            return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
+            if (cmd === '4') { stage[id].timestamps = []; return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL); }
+            if (cmd === '5') { stage[id].timestamps = []; return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL); }
+            
+            if (!stage[id].timestamps) stage[id].timestamps = [];
+            stage[id].timestamps.push(Date.now());
+            if (stage[id].timestamps.length > 3) stage[id].timestamps.shift();
+
+            if (stage[id].timestamps.length === 3) {
+                const tempoTotal = stage[id].timestamps[2] - stage[id].timestamps[0];
+                if (tempoTotal < 10000) { 
+                    cooldown[id] = Date.now(); 
+                    delete stage[id];
+                    console.log(`🔌 [DISJUNTOR] Bot detectado por velocidade no contato: ${id}`);
+                    return; 
+                }
+            }
+            return enviar(id, "Ops, não entendi. Digite the número da opção (1 a 5).");
 
         case 'corte':
             if (CORTES[cmd]) {
                 stage[id].corte = CORTES[cmd].nome;
-                stage[id].valor = stage[id].servico.includes('+') ? 60 : CORTES[cmd].preco;
+                stage[id].valor = stage[id].servico.includes('+') ? (CORTES[cmd].preco + 30) : CORTES[cmd].preco;
                 stage[id].etapa = 'nome';
+                stage[id].timestamps = [];
                 return enviar(id, `Show! Agora me diga seu *nome* para eu gerar o ticket:`);
+            }
+            
+            if (!stage[id].timestamps) stage[id].timestamps = [];
+            stage[id].timestamps.push(Date.now());
+            if (stage[id].timestamps.length > 3) stage[id].timestamps.shift();
+
+            if (stage[id].timestamps.length === 3) {
+                const tempoTotal = stage[id].timestamps[2] - stage[id].timestamps[0];
+                if (tempoTotal < 10000) {
+                    cooldown[id] = Date.now();
+                    delete stage[id];
+                    console.log(`🔌 [DISJUNTOR] Bot detectado por velocidade no contato: ${id}`);
+                    return;
+                }
             }
             return enviar(id, "Por favor, escolha um dos números do menu de cortes.");
 
@@ -245,7 +304,7 @@ client.on('message_create', async (msg) => {
                 `✂️ *Serviço:* ${stage[id].servico} (${stage[id].corte})\n` +
                 `💵 *Valor:* R$ ${stage[id].valor},00\n\n` +
                 `O Dudu já recebeu o seu pedido e em instantes te responderá com os horários disponíveis! 💈\n\n` +
-                `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para você poder falar direto com o Dudu. Se quiseres reiniciar, digite *agendar*.`;
+                `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para você poder falar direto com o Dudu. Se quiseres reiniciar, digite *voltar*.`;
             
             await enviar(id, ticketCompacto);
             
@@ -254,6 +313,29 @@ client.on('message_create', async (msg) => {
             cooldown[id] = Date.now();
             delete stage[id];
             break;
+    }
+});
+
+// ============================================================
+// ANTI-TRAVA RADICAL (FORÇA BRUTA CONTRA LINKS QUEBRADOS)
+// ============================================================
+const arquivosAlvo = [
+    path.join(__dirname, '.wwebjs_auth', 'session', 'SingletonLock'),
+    path.join(__dirname, '.wwebjs_auth', 'session', 'SingletonCookie'),
+    path.join(__dirname, '.wwebjs_auth', 'session', 'SingletonSocket'),
+    path.join(__dirname, '.wwebjs_auth', 'session', 'Default', 'SingletonLock'),
+    path.join(__dirname, '.wwebjs_auth', 'session', 'Default', 'SingletonCookie'),
+    path.join(__dirname, '.wwebjs_auth', 'session', 'Default', 'SingletonSocket')
+];
+
+arquivosAlvo.forEach(caminho => {
+    try {
+        fs.unlinkSync(caminho);
+        console.log(`🧹 [ANTI-TRAVA] Forçado e removido com sucesso: ${path.basename(caminho)}`);
+    } catch (e) {
+        if (e.code !== 'ENOENT') {
+            console.error(`⚠️ Erro ao forced remover lock:`, e.message);
+        }
     }
 });
 
