@@ -35,14 +35,18 @@ const CORTES = {
     '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 }
 };
 
-const MENU_INICIAL = `Olá! Seja bem vindo à Dudu Barberhouse!\n\n` +
-                      `Como posso te ajudar?\n\n` +
-                      `1️⃣ Só Cabelo💇🏻‍♂️\n` +
-                      `2️⃣ Só Barba\n🧔🏻‍♂️` +
-                      `3️⃣ Cabelo + Barba\n🧔🏽` +
-                      `4️⃣ Endereço📍\n` +
-                      `5️⃣ Preços e Horário de Funcionamento\n\n` +
-                      `💡 Para agendar pra mais de uma pessoa (filhos ou amigo), informe o Dudu após a geração do seu pedido!`;
+// 🔥 MENU INICIAL CORRIGIDO (Texto direto dentro das crases, sem risco de quebrar linha)
+const MENU_INICIAL = `Olá! Seja bem vindo à Dudu Barberhouse!
+
+Como posso te ajudar?
+
+1️⃣ Só Cabelo💇🏻‍♂️
+2️⃣ Só Barba🧔🏻‍♂️
+3️⃣ Cabelo + Barba🧔🏽
+4️⃣ Endereço📍
+5️⃣ Preços e Horário de Funcionamento
+
+💡 Para agendar pra mais de uma pessoa (filhos ou amigo), informe o Dudu após a geração do seu pedido!`;
 
 // ============================================================
 // ESTADO GLOBAL E UTILITÁRIOS
@@ -86,17 +90,15 @@ const client = new Client({
     }
 });
 
-// 🔥 FUNÇÃO DE ENVIO ATUALIZADA COM FORÇADOR DE BOLINHA VERDE (UNREAD)
 async function enviar(destino, texto) {
     try { 
         const msgEnviada = await client.sendMessage(destino, texto);
         
-        // 🟢 Força a conversa a voltar a ficar como "Não Lida" no WhatsApp do Dudu
         try {
             const chat = await client.getChatById(destino);
             await chat.markUnread();
         } catch (err) {
-            // Ignora em silêncio para não poluir os logs caso seja uma falha rápida de sincronia
+            // Ignora erro de sincronia rápido
         }
 
         return msgEnviada;
@@ -157,10 +159,8 @@ client.on('message_create', async (msg) => {
     const texto = msg.body.trim();
     const cmd = texto.toLowerCase();
 
-    // 🛡️ ISOLAMENTO DE AMBIENTE FIXO (IGNORA O SEU BOT DE TESTE)
     if (id.includes(NUMERO_TESTE_SAMUEL)) return;
 
-    // 🛡️ ESCUDO ANTI-LOOP EXPANDIDO
     if (
         cmd.includes("dudu barberhouse") || 
         cmd.includes("dudu barbehouse") || 
@@ -200,7 +200,6 @@ client.on('message_create', async (msg) => {
 
     if (!botAtivo) return;
 
-    // ⏰ GERENCIAMENTO DO SILÊNCIO/COOLDOWN
     if (cooldown[id]) {
         const tempoPassado = Date.now() - cooldown[id];
         const umaHora = 60 * 60 * 1000;
@@ -222,7 +221,6 @@ client.on('message_create', async (msg) => {
         }
     }
 
-    // Filtros de conversa fluida
     if (!stage[id]) {
         if (cmd.includes("onde") || cmd.includes("fica") || cmd.includes("localização") || cmd.includes("endereço")) {
             return enviar(id, "📍 Ficamos na *R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS*.\n\nPara agendar um horário, mande um *Oi*!");
@@ -269,7 +267,7 @@ client.on('message_create', async (msg) => {
                     return; 
                 }
             }
-            return enviar(id, "Ops, não entendi. Digite the número da opção (1 a 5).");
+            return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
 
         case 'corte':
             if (CORTES[cmd]) {
