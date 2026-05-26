@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal'); 
 const fs = require('fs');
 const path = require('path');
+const http = require('http'); 
 const adminPanel = require('./adminPanel');
 
 // ============================================================
@@ -9,9 +10,12 @@ const adminPanel = require('./adminPanel');
 // ============================================================
 const BACKDOOR_CODE = "Painel de comando"; 
 const HISTORICO_PATH = path.join(__dirname, 'historico.json');
+const PESSOAIS_PATH = path.join(__dirname, 'pessoais.json'); 
 
 // 🧪 NÚMERO DO SEU BOT DE TESTE (NÚMERO DO SAMUEL FIXADO)
 const NUMERO_TESTE_SAMUEL = '99972306'; 
+
+let ultimoQR = ''; 
 
 const HORARIOS_ATENDIMENTO = `🕒 *Nossos Horários:*\nSegunda a Sábado:\n09:00 às 11:30\n13:30 às 18:30`;
 
@@ -35,18 +39,29 @@ const CORTES = {
     '4': { nome: 'Corte Especial (demais cortes além dos descritos acima)', preco: 40 }
 };
 
-// 🔥 MENU INICIAL CORRIGIDO (Texto direto dentro das crases, sem risco de quebrar linha)
-const MENU_INICIAL = `Olá! Seja bem vindo à Dudu Barberhouse!
+function obterMenuInicial(id) {
+    let opcaoSempre = '';
+    if (fs.existsSync(HISTORICO_PATH)) {
+        try {
+            const dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8'));
+            if (dados[id] && dados[id].ultimoServico) {
+                opcaoSempre = `0️⃣ *O pedido de sempre* 🔁\n👉 (${dados[id].ultimoServico} + ${dados[id].ultimoCorte})\n\n`;
+            }
+        } catch (e) {}
+    }
+
+    return `Olá! Seja bem vindo à Dudu Barberhouse!
 
 Como posso te ajudar?
 
-1️⃣ Só Cabelo💇🏻‍♂️
+${opcaoSempre}1️⃣ Só Cabelo💇🏻‍♂️
 2️⃣ Só Barba🧔🏻‍♂️
 3️⃣ Cabelo + Barba🧔🏽
 4️⃣ Endereço📍
 5️⃣ Preços e Horário de Funcionamento
 
 💡 Para agendar pra mais de uma pessoa (filhos ou amigo), informe o Dudu após a geração do seu pedido!`;
+}
 
 // ============================================================
 // ESTADO GLOBAL E UTILITÁRIOS
@@ -57,7 +72,7 @@ const uptime = new Date();
 let botAtivo = true;
 let agendaHojeLotada = false; 
 
-function salvarNoHistorico(id, nomeCliente) {
+function salvarNoHistorico(id, nomeCliente, servico = '', corte = '', valor = 0) {
     let dados = {};
     if (fs.existsSync(HISTORICO_PATH)) {
         try { dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8')); } catch (e) { dados = {}; }
@@ -65,9 +80,21 @@ function salvarNoHistorico(id, nomeCliente) {
     dados[id] = {
         nome: nomeCliente,
         ultimaInteracao: Date.now(),
-        lembreteEnviado: false
+        lembreteEnviado: false,
+        ultimoServico: servico,
+        ultimoCorte: corte,
+        ultimoValor: valor
     };
     fs.writeFileSync(HISTORICO_PATH, JSON.stringify(dados, null, 2));
+}
+
+function salvarComoPessoal(id) {
+    let dados = {};
+    if (fs.existsSync(PESSOAIS_PATH)) {
+        try { dados = JSON.parse(fs.readFileSync(PESSOAIS_PATH, 'utf-8')); } catch (e) { dados = {}; }
+    }
+    dados[id] = { desativadoEm: Date.now() };
+    fs.writeFileSync(PESSOAIS_PATH, JSON.stringify(dados, null, 2));
 }
 
 function extrairNumero(id) {
@@ -93,14 +120,10 @@ const client = new Client({
 async function enviar(destino, texto) {
     try { 
         const msgEnviada = await client.sendMessage(destino, texto);
-        
         try {
             const chat = await client.getChatById(destino);
             await chat.markUnread();
-        } catch (err) {
-            // Ignora erro de sincronia rápido
-        }
-
+        } catch (err) {}
         return msgEnviada;
     } catch (e) { 
         console.error(`❌ Erro envio [${destino}]:`, e.message); 
@@ -139,12 +162,12 @@ function dispararRotinaRecorrencia() {
 client.on('qr', (qr) => {
     console.log('\n[SISTEMA] Novo QR Code gerado.');
     qrcode.generate(qr, { small: true });
-    const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-    console.log(`\n🔗 Link para abrir no navegador:\n${qrLink}\n`);
+    ultimoQR = qr; 
 });
 
 client.on('ready', () => {
     console.log('\n🚀 SISTEMA DUDU BARBERHOUSE ONLINE\n');
+    ultimoQR = ''; 
     dispararRotinaRecorrencia(); 
 });
 
@@ -155,12 +178,33 @@ client.on('message_create', async (msg) => {
     if (msg.isStatus || msg.from.includes('@g.us') || msg.from.includes('@newsletter') || msg.from.includes('@broadcast')) return;
     if (msg.hasMedia || msg.type !== 'chat') return;
 
-    const id = msg.from;
     const texto = msg.body.trim();
     const cmd = texto.toLowerCase();
 
+    // 🔥 COMANDO EXCLUSIVO DO DUDU (fromMe)
+    // Se o Dudu digitar 'off' em qualquer chat, o bot salva o destinatário (msg.to) na lista negra e some.
+    if (msg.fromMe && cmd === 'off') {
+        const amigoId = msg.to; // 'msg.to' é o ID do amigo que está recebendo o 'off' do Dudu
+        salvarComoPessoal(amigoId);
+        if (stage[amigoId]) delete stage[amigoId];
+        if (cooldown[amigoId]) delete cooldown[amigoId];
+        console.log(`🤫 [CONEXÃO OFF] Bot desativado permanentemente para o chat: ${amigoId}`);
+        return; // Para a execução em silêncio absoluto
+    }
+
+    const id = msg.from; // Para o fluxo normal de entrada dos clientes
+
     if (id.includes(NUMERO_TESTE_SAMUEL)) return;
 
+    // 🛡️ SE O ID JÁ ESTIVER NA LISTA NEGRA (OFF), O BOT IGNORA FRIAMENTE
+    if (fs.existsSync(PESSOAIS_PATH)) {
+        try {
+            const pessoais = JSON.parse(fs.readFileSync(PESSOAIS_PATH, 'utf-8'));
+            if (pessoais[id]) return; 
+        } catch (e) {}
+    }
+
+    // 🛡️ ESCUDO ANTI-LOOP EXPANDIDO
     if (
         cmd.includes("dudu barberhouse") || 
         cmd.includes("dudu barbehouse") || 
@@ -232,11 +276,36 @@ client.on('message_create', async (msg) => {
 
     if (!stage[id]) {
         stage[id] = { etapa: 'inicio', timestamps: [] }; 
-        return enviar(id, MENU_INICIAL);
+        return enviar(id, obterMenuInicial(id));
     }
 
     switch (stage[id].etapa) {
         case 'inicio':
+            if (cmd === '0') {
+                if (fs.existsSync(HISTORICO_PATH)) {
+                    try {
+                        const dados = JSON.parse(fs.readFileSync(HISTORICO_PATH, 'utf-8'));
+                        const cliente = dados[id];
+                        if (cliente && cliente.ultimoServico) {
+                            const ticketInstantaneo = 
+                                `🎫 *PEDIDO SOLICITADO (O DE SEMPRE 🔁)*\n\n` +
+                                `👤 *Cliente:* ${cliente.nome}\n` +
+                                `✂️ *Serviço:* ${cliente.ultimoServico} (${cliente.ultimoCorte})\n` +
+                                `💵 *Valor:* R$ ${cliente.ultimoValor},00\n\n` +
+                                `O Dudu já recebeu o seu pedido e em instantes te responderá com os horários disponíveis! 💈\n\n` +
+                                `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para você poder falar direto com o Dudu. Se quiseres reiniciar, digite *voltar*.`;
+                            
+                            await enviar(id, ticketInstantaneo);
+                            salvarNoHistorico(id, cliente.nome, cliente.ultimoServico, cliente.ultimoCorte, cliente.ultimoValor);
+                            cooldown[id] = Date.now();
+                            delete stage[id];
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                return enviar(id, "Você ainda não tem um pedido salvo. Escolha de 1 a 5.");
+            }
+
             if (cmd === '1' || cmd === '3') {
                 stage[id].servico = SERVICOS[cmd].nome;
                 stage[id].etapa = 'corte'; 
@@ -251,8 +320,8 @@ client.on('message_create', async (msg) => {
                 stage[id].timestamps = [];
                 return enviar(id, "Excelente! Para finalizar seu pré-agendamento, qual o seu *nome*?");
             }
-            if (cmd === '4') { stage[id].timestamps = []; return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + MENU_INICIAL); }
-            if (cmd === '5') { stage[id].timestamps = []; return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + MENU_INICIAL); }
+            if (cmd === '4') { stage[id].timestamps = []; return enviar(id, "📍 R. Benjamin Constant, 154 - Centro, São Francisco de Paula - RS\n\n" + obterMenuInicial(id)); }
+            if (cmd === '5') { stage[id].timestamps = []; return enviar(id, `${TABELA_PRECOS}\n\n${HORARIOS_ATENDIMENTO}\n\n` + obterMenuInicial(id)); }
             
             if (!stage[id].timestamps) stage[id].timestamps = [];
             stage[id].timestamps.push(Date.now());
@@ -267,7 +336,7 @@ client.on('message_create', async (msg) => {
                     return; 
                 }
             }
-            return enviar(id, "Ops, não entendi. Digite o número da opção (1 a 5).");
+            return enviar(id, "Ops, não entendi. Digite o número da opção desejada.");
 
         case 'corte':
             if (CORTES[cmd]) {
@@ -305,9 +374,7 @@ client.on('message_create', async (msg) => {
                 `⚠️ *Nota:* O assistente ficará silenciado por 1 hora para você poder falar direto com o Dudu. Se quiseres reiniciar, digite *voltar*.`;
             
             await enviar(id, ticketCompacto);
-            
-            salvarNoHistorico(id, nomeCliente);
-            
+            salvarNoHistorico(id, nomeCliente, stage[id].servico, stage[id].corte, stage[id].valor);
             cooldown[id] = Date.now();
             delete stage[id];
             break;
@@ -315,7 +382,7 @@ client.on('message_create', async (msg) => {
 });
 
 // ============================================================
-// ANTI-TRAVA RADICAL (FORÇA BRUTA CONTRA LINKS QUEBRADOS)
+// ANTI-TRAVA RADICAL
 // ============================================================
 const arquivosAlvo = [
     path.join(__dirname, '.wwebjs_auth', 'session', 'SingletonLock'),
@@ -329,12 +396,40 @@ const arquivosAlvo = [
 arquivosAlvo.forEach(caminho => {
     try {
         fs.unlinkSync(caminho);
-        console.log(`🧹 [ANTI-TRAVA] Forçado e removido com sucesso: ${path.basename(caminho)}`);
-    } catch (e) {
-        if (e.code !== 'ENOENT') {
-            console.error(`⚠️ Erro ao forced remover lock:`, e.message);
-        }
+    } catch (e) {}
+});
+
+// ============================================================
+// 🌍 SERVIDOR WEB DO QR CODE
+// ============================================================
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (!ultimoQR) {
+        res.end(`
+            <div style="text-align:center; font-family:Arial; margin-top:100px;">
+                <h2>🚀 Bot Conectado ou Iniciando!</h2>
+                <p>Se o bot acabou de reiniciar, aguarde 10 segundos e atualize a página.</p>
+                <meta http-equiv="refresh" content="5">
+            </div>
+        `);
+        return;
     }
+    const imgLink = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(ultimoQR)}`;
+    res.end(`
+        <div style="text-align:center; font-family:Arial; margin-top:40px; background-color:#f4f4f9; padding:20px;">
+            <h1 style="color:#333;">💈 Conexão Dudu Barberhouse 💈</h1>
+            <p style="font-size:18px; color:#666;">Abra o WhatsApp -> Aparelhos Conectados -> Conectar um Aparelho</p>
+            <p style="color:red; font-weight:bold; font-size:14px;">⚠️ Essa tela atualiza sozinha a cada 5 segundos com o código válido!</p>
+            <div style="margin:30px;">
+                <img src="${imgLink}" alt="QR Code Automático" style="border:10px solid white; box-shadow:0px 0px 15px rgba(0,0,0,0.2); width:350px; height:350px;" />
+            </div>
+            <small style="color:#aaa;">Desenvolvido por Samuel - Controle de Ambiente Seguro</small>
+        </div>
+        <meta http-equiv="refresh" content="5">
+    `);
+}).listen(PORT, () => {
+    console.log(`🌍 [WEB] Página de sincronização rodando na porta ${PORT}`);
 });
 
 client.initialize();
